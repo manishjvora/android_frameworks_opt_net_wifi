@@ -13,21 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.android.server.wifi;
-
 import android.content.Context;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiConfiguration.KeyMgmt;
 import android.os.Environment;
-import android.os.Handler;
-import android.os.Message;
-import android.os.Messenger;
-import android.text.TextUtils;
 import android.util.Log;
-
 import com.android.internal.R;
-
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
@@ -37,44 +29,31 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.UUID;
-
 /**
  * Provides API for reading/writing soft access point configuration.
  */
 public class WifiApConfigStore {
-
     private static final String TAG = "WifiApConfigStore";
-
     private static final String DEFAULT_AP_CONFIG_FILE =
             Environment.getDataDirectory() + "/misc/wifi/softap.conf";
-
     private static final int AP_CONFIG_FILE_VERSION = 2;
-
     private WifiConfiguration mWifiApConfig = null;
-
     private ArrayList<Integer> mAllowed2GChannel = null;
-
     private final Context mContext;
     private final String mApConfigFile;
     private final BackupManagerProxy mBackupManagerProxy;
-
-    private static boolean mEnableRegionalHotspotCheckbox = false;
-
     WifiApConfigStore(Context context, BackupManagerProxy backupManagerProxy) {
         this(context, backupManagerProxy, DEFAULT_AP_CONFIG_FILE);
     }
-
     WifiApConfigStore(Context context,
                       BackupManagerProxy backupManagerProxy,
                       String apConfigFile) {
         mContext = context;
         mBackupManagerProxy = backupManagerProxy;
         mApConfigFile = apConfigFile;
-
         String ap2GChannelListStr = mContext.getResources().getString(
                 R.string.config_wifi_framework_sap_2G_channel_list);
         Log.d(TAG, "2G band allowed channels are:" + ap2GChannelListStr);
-
         if (ap2GChannelListStr != null) {
             mAllowed2GChannel = new ArrayList<Integer>();
             String channelList[] = ap2GChannelListStr.split(",");
@@ -82,31 +61,22 @@ public class WifiApConfigStore {
                 mAllowed2GChannel.add(Integer.parseInt(tmp));
             }
         }
-
         /* Load AP configuration from persistent storage. */
         mWifiApConfig = loadApConfiguration(mApConfigFile);
         if (mWifiApConfig == null) {
             /* Use default configuration. */
             Log.d(TAG, "Fallback to use default AP configuration");
             mWifiApConfig = getDefaultApConfiguration();
-
             /* Save the default configuration to persistent storage. */
             writeApConfiguration(mApConfigFile, mWifiApConfig);
         }
-        if (mContext.getResources().getBoolean(
-                    com.android.internal.R.bool.config_regional_hotspot_show_broadcast_ssid_checkbox
-        )) {
-            mEnableRegionalHotspotCheckbox = true;
-        }
     }
-
     /**
      * Return the current soft access point configuration.
      */
     public synchronized WifiConfiguration getApConfiguration() {
         return mWifiApConfig;
     }
-
     /**
      * Update the current soft access point configuration.
      * Restore to default AP configuration if null is provided.
@@ -120,15 +90,12 @@ public class WifiApConfigStore {
             mWifiApConfig = config;
         }
         writeApConfiguration(mApConfigFile, mWifiApConfig);
-
         // Stage the backup of the SettingsProvider package which backs this up
         mBackupManagerProxy.notifyDataChanged();
     }
-
     public ArrayList<Integer> getAllowed2GChannel() {
         return mAllowed2GChannel;
     }
-
     /**
      * Load AP configuration from persistent storage.
      */
@@ -139,30 +106,20 @@ public class WifiApConfigStore {
             config = new WifiConfiguration();
             in = new DataInputStream(
                     new BufferedInputStream(new FileInputStream(filename)));
-
             int version = in.readInt();
             if ((version != 1) && (version != 2)) {
                 Log.e(TAG, "Bad version on hotspot configuration file");
                 return null;
             }
             config.SSID = in.readUTF();
-            if (mEnableRegionalHotspotCheckbox) {
-                config.hiddenSSID = (in.readInt() != 0);
-            }
-
             if (version >= 2) {
                 config.apBand = in.readInt();
                 config.apChannel = in.readInt();
             }
-
             int authType = in.readInt();
             config.allowedKeyManagement.set(authType);
             if (authType != KeyMgmt.NONE) {
                 config.preSharedKey = in.readUTF();
-            }
-            // read in wifiApInactivityTimeout if bytes are available from in
-            if (in.available() != 0) {
-                config.wifiApInactivityTimeout = in.readLong();
             }
         } catch (IOException e) {
             Log.e(TAG, "Error reading hotspot configuration " + e);
@@ -178,7 +135,6 @@ public class WifiApConfigStore {
         }
         return config;
     }
-
     /**
      * Write AP configuration to persistent storage.
      */
@@ -188,9 +144,6 @@ public class WifiApConfigStore {
                         new FileOutputStream(filename)))) {
             out.writeInt(AP_CONFIG_FILE_VERSION);
             out.writeUTF(config.SSID);
-            if (mEnableRegionalHotspotCheckbox) {
-                out.writeInt(config.hiddenSSID ? 1 : 0);
-            }
             out.writeInt(config.apBand);
             out.writeInt(config.apChannel);
             int authType = config.getAuthType();
@@ -198,12 +151,10 @@ public class WifiApConfigStore {
             if (authType != KeyMgmt.NONE) {
                 out.writeUTF(config.preSharedKey);
             }
-            out.writeLong(config.wifiApInactivityTimeout);
         } catch (IOException e) {
             Log.e(TAG, "Error writing hotspot configuration" + e);
         }
     }
-
     /**
      * Generate a default WPA2 based configuration with a random password.
      * We are changing the Wifi Ap configuration storage from secure settings to a
@@ -214,17 +165,10 @@ public class WifiApConfigStore {
         WifiConfiguration config = new WifiConfiguration();
         config.SSID = mContext.getResources().getString(
                 R.string.wifi_tether_configure_ssid_default);
-        int wifiApSecurityType = mContext.getResources().getInteger(
-                R.integer.wifi_hotspot_security_type);
-        config.allowedKeyManagement.set(wifiApSecurityType);
-        config.preSharedKey = mContext.getResources().getString(
-                R.string.def_wifi_wifihotspot_pass);
-        if (TextUtils.isEmpty(config.preSharedKey)) {
-            String randomUUID = UUID.randomUUID().toString();
-            //first 12 chars from xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
-            config.preSharedKey = randomUUID.substring(0, 8) + randomUUID.substring(9,13);
-        }
-        config.wifiApInactivityTimeout = 0;
+        config.allowedKeyManagement.set(KeyMgmt.WPA2_PSK);
+        String randomUUID = UUID.randomUUID().toString();
+        //first 12 chars from xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+        config.preSharedKey = randomUUID.substring(0, 8) + randomUUID.substring(9, 13);
         return config;
     }
 }
